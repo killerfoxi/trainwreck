@@ -14,5 +14,6 @@
   # https://devenv.sh/packages/
   packages = [
     pkgs.cargo-edit
+    pkgs.protobuf
   ];
 }
