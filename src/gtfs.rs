@@ -6,4 +6,5 @@ mod model;
 mod query;
 
 pub use archive::GtfsArchive;
+pub use model::GtfsTime;
 pub use query::StopSchedule;

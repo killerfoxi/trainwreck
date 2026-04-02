@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use color_eyre::eyre::{self, WrapErr};
+use jiff::{ToSpan as _, Zoned};
 
 #[derive(Parser)]
 #[command(
@@ -92,24 +93,16 @@ async fn show_schedule(
         None
     };
 
-    if let Some(feed) = realtime {
-        print_departures(&schedule, &feed);
-        return Ok(());
-    }
-
-    let summaries = schedule.route_summaries();
-    if summaries.is_empty() {
-        println!("  No trips found.");
-        return Ok(());
-    }
-    for summary in &summaries {
-        println!("  {summary}");
-    }
-
+    let now = Zoned::now();
+    print_departures(&schedule, realtime.as_ref(), &now);
     Ok(())
 }
 
-fn print_departures(schedule: &gtfs::StopSchedule, feed: &realtime::RealtimeFeed) {
+fn print_departures(
+    schedule: &gtfs::StopSchedule,
+    feed: Option<&realtime::RealtimeFeed>,
+    now: &Zoned,
+) {
     let departures = schedule.departures();
     if departures.is_empty() {
         println!("  No trips found.");
@@ -117,22 +110,35 @@ fn print_departures(schedule: &gtfs::StopSchedule, feed: &realtime::RealtimeFeed
     }
     for (st, trip, route) in departures {
         let route_name = route
-            .and_then(|r| {
-                r.route_short_name
-                    .as_deref()
-                    .or(r.route_long_name.as_deref())
-            })
+            .and_then(|r| r.route_short_name.as_deref().or(r.route_long_name.as_deref()))
             .unwrap_or(trip.route_id.as_str());
         let headsign = trip.trip_headsign.as_deref().unwrap_or("?");
-
+        let rel = relative_time(st.departure_time, now);
         let status_str = feed
-            .status_for(&trip.trip_id, &schedule.stop.stop_id)
+            .and_then(|f| f.status_for(&trip.trip_id, &schedule.stop.stop_id))
             .map(|s| s.to_string())
             .unwrap_or_default();
 
         println!(
-            "{} | {:<6} → {:<30} {}",
-            st.departure_time, route_name, headsign, status_str
+            "{} {:<8} | {:<6} → {:<30} {}",
+            st.departure_time, rel, route_name, headsign, status_str
         );
+    }
+}
+
+/// Returns "+Xm" (upcoming) or "Xm ago" (past) relative to `now`.
+/// Uses today's service date; GTFS times ≥ 24h are treated as next-calendar-day departures.
+fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
+    let tz = now.time_zone().clone();
+    let Ok(midnight) = now.date().at(0, 0, 0, 0).to_zoned(tz) else {
+        return String::new();
+    };
+    let departure = midnight + i64::from(dep.as_secs()).seconds();
+    let diff_mins =
+        (departure.timestamp().as_second() - now.timestamp().as_second()) / 60;
+    if diff_mins >= 0 {
+        format!("+{diff_mins}m")
+    } else {
+        format!("{diff_mins}m ago", diff_mins = -diff_mins)
     }
 }

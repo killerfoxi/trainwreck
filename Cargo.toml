@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.6.0", features = ["derive", "env"] }
 color-eyre = "0.6.5"
+jiff = { version = "0.2.23", default-features = false, features = ["std", "tzdb-bundle-platform"] }
 csv = "1.4.0"
 prost = { version = "0.14.3", default-features = false, features = ["derive", "std"] }
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
