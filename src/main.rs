@@ -9,7 +9,10 @@ use clap::Parser;
 use color_eyre::eyre::{self, WrapErr};
 
 #[derive(Parser)]
-#[command(about = "Display GTFS transit schedules with optional real-time updates")]
+#[command(
+    version,
+    about = "Display GTFS transit schedules with optional real-time updates"
+)]
 struct Args {
     /// Path to a GTFS zip archive
     gtfs: PathBuf,
@@ -64,7 +67,10 @@ async fn show_schedule(
         for stop in &matches {
             println!("  [{}] {}", stop.stop_id, stop.stop_name);
         }
-        println!("\nShowing schedule for first match: {}", matches[0].stop_name);
+        println!(
+            "\nShowing schedule for first match: {}",
+            matches[0].stop_name
+        );
     }
 
     let stop_id = &matches[0].stop_id;
@@ -111,7 +117,11 @@ fn print_departures(schedule: &gtfs::StopSchedule, feed: &realtime::RealtimeFeed
     }
     for (st, trip, route) in departures {
         let route_name = route
-            .and_then(|r| r.route_short_name.as_deref().or(r.route_long_name.as_deref()))
+            .and_then(|r| {
+                r.route_short_name
+                    .as_deref()
+                    .or(r.route_long_name.as_deref())
+            })
             .unwrap_or(trip.route_id.as_str());
         let headsign = trip.trip_headsign.as_deref().unwrap_or("?");
 
