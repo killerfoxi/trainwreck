@@ -32,24 +32,23 @@ pub async fn fetch_trip_updates(api_key: &str) -> Result<RealtimeFeed, RealtimeE
         .filter_map(|tu| {
             let trip_id = tu.trip.trip_id.filter(|id| !id.is_empty())?;
 
-            let status = if tu.trip.schedule_relationship == Some(TRIP_CANCELED) {
-                TripStatus::Canceled
-            } else {
-                let stops = tu
-                    .stop_time_update
-                    .into_iter()
-                    .filter_map(|stu| {
-                        let stop_id = stu.stop_id.filter(|id| !id.is_empty())?;
-                        Some((
-                            stop_id,
-                            StopTimeStatus {
-                                departure_delay_secs: stu.departure.and_then(|e| e.delay),
-                                skipped: stu.schedule_relationship == Some(STOP_SKIPPED),
-                            },
-                        ))
-                    })
-                    .collect();
-                TripStatus::Running(stops)
+            let status = match tu.trip.schedule_relationship {
+                Some(TRIP_CANCELED) => TripStatus::Canceled,
+                _ => TripStatus::Running(
+                    tu.stop_time_update
+                        .into_iter()
+                        .filter_map(|stu| {
+                            let stop_id = stu.stop_id.filter(|id| !id.is_empty())?;
+                            Some((
+                                stop_id,
+                                StopTimeStatus {
+                                    departure_delay_secs: stu.departure.and_then(|e| e.delay),
+                                    skipped: stu.schedule_relationship == Some(STOP_SKIPPED),
+                                },
+                            ))
+                        })
+                        .collect(),
+                ),
             };
 
             Some((trip_id, status))

@@ -53,13 +53,11 @@ impl std::fmt::Display for GtfsTime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let h = self.0 / 3600;
         let m = (self.0 % 3600) / 60;
-        if h >= 24 {
-            // Past midnight of the service day; show wall-clock time with +1d marker.
-            let h = h - 24;
-            write!(f, "{h:02}:{m:02}+1d")
-        } else {
-            write!(f, "{h:02}:{m:02}")
+        if h < 24 {
+            return write!(f, "{h:02}:{m:02}");
         }
+        // Past midnight of the service day; show wall-clock time with +1d marker.
+        write!(f, "{:02}:{m:02}+1d", h - 24)
     }
 }
 

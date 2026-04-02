@@ -92,30 +92,35 @@ impl GtfsArchive {
         let date_str = format!(
             "{:04}{:02}{:02}",
             date.year(),
-            i8::from(date.month()),
+            date.month(),
             date.day(),
         );
-        let mut has_data = false;
-        let mut active: HashSet<String> = HashSet::new();
-
-        if let Some(calendars) = self.read_optional_csv::<Calendar>("calendar.txt")? {
-            has_data = true;
-            for cal in calendars {
-                if cal.start_date.as_str() <= date_str.as_str()
-                    && date_str.as_str() <= cal.end_date.as_str()
-                    && cal.runs_on(date.weekday())
-                {
-                    active.insert(cal.service_id);
-                }
-            }
-        }
-
-        if let Some(exceptions) =
+        let calendars = self.read_optional_csv::<Calendar>("calendar.txt")?;
+        let exceptions =
             self.read_optional_csv_filtered::<CalendarDate>("calendar_dates.txt", |cd| {
                 cd.date == date_str
-            })?
-        {
-            has_data = true;
+            })?;
+
+        if calendars.is_none() && exceptions.is_none() {
+            return Ok(None);
+        }
+
+        let mut active = HashSet::new();
+
+        if let Some(calendars) = calendars {
+            active.extend(
+                calendars
+                    .into_iter()
+                    .filter(|cal| {
+                        cal.start_date.as_str() <= date_str.as_str()
+                            && date_str.as_str() <= cal.end_date.as_str()
+                            && cal.runs_on(date.weekday())
+                    })
+                    .map(|cal| cal.service_id),
+            );
+        }
+
+        if let Some(exceptions) = exceptions {
             for cd in exceptions {
                 match cd.exception_type {
                     1 => { active.insert(cd.service_id); }
@@ -125,7 +130,7 @@ impl GtfsArchive {
             }
         }
 
-        Ok(has_data.then_some(active))
+        Ok(Some(active))
     }
 
     /// Build a schedule for the given stops, optionally filtered to active service IDs.
@@ -147,7 +152,7 @@ impl GtfsArchive {
 
         let trips: Vec<Trip> = self.read_csv_filtered("trips.txt", |t: &Trip| {
             trip_ids.contains(t.trip_id.as_str())
-                && active_services.map_or(true, |s| s.contains(t.service_id.as_str()))
+                && active_services.is_none_or(|s| s.contains(t.service_id.as_str()))
         })?;
 
         let route_ids: HashSet<&str> = trips.iter().map(|t| t.route_id.as_str()).collect();

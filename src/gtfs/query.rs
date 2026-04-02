@@ -26,5 +26,4 @@ impl StopSchedule {
         deps.sort_unstable_by_key(|&(st, _, _)| st.departure_time);
         deps
     }
-
 }

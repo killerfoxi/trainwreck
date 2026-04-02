@@ -30,11 +30,10 @@ impl std::fmt::Display for DepartureStatus {
                 let sign = if *delay_secs > 0 { "+" } else { "-" };
                 let secs = delay_secs.unsigned_abs();
                 let (mins, rem) = (secs / 60, secs % 60);
-                if mins > 0 {
-                    write!(f, "[{sign}{mins}m{rem:02}s]")
-                } else {
-                    write!(f, "[{sign}{rem}s]")
+                if mins == 0 {
+                    return write!(f, "[{sign}{rem}s]");
                 }
+                write!(f, "[{sign}{mins}m{rem:02}s]")
             }
         }
     }
@@ -46,12 +45,11 @@ impl RealtimeFeed {
             TripStatus::Canceled => Some(DepartureStatus::Canceled),
             TripStatus::Running(stops) => {
                 let sts = stops.get(stop_id)?;
-                Some(if sts.skipped {
-                    DepartureStatus::Skipped
-                } else {
-                    DepartureStatus::OnTime {
-                        delay_secs: sts.departure_delay_secs.unwrap_or(0),
-                    }
+                if sts.skipped {
+                    return Some(DepartureStatus::Skipped);
+                }
+                Some(DepartureStatus::OnTime {
+                    delay_secs: sts.departure_delay_secs.unwrap_or(0),
                 })
             }
         }

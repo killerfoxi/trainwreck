@@ -97,14 +97,13 @@ async fn show_schedule(
         }
     }
 
-    let realtime = if let Some(key) = api_key {
-        realtime::fetch_trip_updates(key)
+    let realtime = async {
+        realtime::fetch_trip_updates(api_key?)
             .await
             .inspect_err(|e| eprintln!("Warning: real-time data unavailable: {e}"))
             .ok()
-    } else {
-        None
-    };
+    }
+    .await;
 
     print_departures(&schedule, realtime.as_ref(), &now);
     Ok(())
@@ -151,8 +150,8 @@ fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
     // floor for past trains since they've already been gone that many whole minutes.
     match diff_secs {
         0 => "now".to_owned(),
-        1.. => format!("in {}", fmt_duration(((diff_secs + 59) / 60) as u64)),
-        _ => format!("{} ago", fmt_duration((-diff_secs / 60) as u64)),
+        1.. => format!("in {}", fmt_duration(((diff_secs + 59) / 60).cast_unsigned())),
+        _ => format!("{} ago", fmt_duration((-diff_secs / 60).cast_unsigned())),
     }
 }
 
