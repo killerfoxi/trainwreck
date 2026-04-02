@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
-use super::model::{Route, Stop, StopTime, Trip};
+use super::model::{Route, StopTime, Trip};
 
-/// All trips serving a particular stop, with their routes resolved.
+/// All trips serving a set of stops, with their routes resolved.
 pub struct StopSchedule {
-    pub stop: Stop,
     pub stop_times: Vec<StopTime>,
     pub trips: HashMap<String, Trip>,
     pub routes: HashMap<String, Route>,

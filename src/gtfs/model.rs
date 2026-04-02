@@ -1,6 +1,7 @@
 // Field names are dictated by the GTFS CSV specification.
 #![allow(clippy::struct_field_names)]
 
+use jiff::civil::Weekday;
 use serde::Deserialize;
 
 /// A GTFS service time, which may exceed 24 hours for post-midnight trips.
@@ -80,10 +81,56 @@ pub struct StopTime {
 /// A trip along a route.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Trip {
+    pub service_id: String,
     pub route_id: String,
     pub trip_id: String,
     #[serde(default)]
     pub trip_headsign: Option<String>,
+}
+
+/// A service schedule defining which days a service operates.
+/// See <https://gtfs.org/documentation/schedule/reference/#calendartxt>.
+#[derive(Debug, Deserialize)]
+pub struct Calendar {
+    pub service_id: String,
+    pub monday: u8,
+    pub tuesday: u8,
+    pub wednesday: u8,
+    pub thursday: u8,
+    pub friday: u8,
+    pub saturday: u8,
+    pub sunday: u8,
+    pub start_date: String, // YYYYMMDD
+    pub end_date: String,   // YYYYMMDD
+}
+
+impl Calendar {
+    pub fn runs_on(&self, weekday: Weekday) -> bool {
+        match weekday {
+            Weekday::Monday => self.monday == 1,
+            Weekday::Tuesday => self.tuesday == 1,
+            Weekday::Wednesday => self.wednesday == 1,
+            Weekday::Thursday => self.thursday == 1,
+            Weekday::Friday => self.friday == 1,
+            Weekday::Saturday => self.saturday == 1,
+            Weekday::Sunday => self.sunday == 1,
+        }
+    }
+}
+
+/// A service date exception (added or removed service day).
+/// See <https://gtfs.org/documentation/schedule/reference/#calendar_datestxt>.
+#[derive(Debug, Deserialize)]
+pub struct CalendarDate {
+    pub service_id: String,
+    pub date: String,       // YYYYMMDD
+    pub exception_type: u8, // 1 = added, 2 = removed
+}
+
+/// A transit agency (operator).
+#[derive(Debug, Deserialize)]
+pub struct Agency {
+    pub agency_timezone: String,
 }
 
 /// A transit route.

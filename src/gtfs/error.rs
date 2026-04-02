@@ -25,7 +25,4 @@ pub enum GtfsError {
         #[source]
         source: csv::Error,
     },
-
-    #[error("stop \"{0}\" not found")]
-    StopNotFound(String),
 }

@@ -24,6 +24,11 @@ struct Args {
     /// API key for real-time data (or set `OTD_API_KEY` env var)
     #[arg(long, env = "OTD_API_KEY")]
     api_key: Option<String>,
+
+    /// IANA timezone for interpreting GTFS departure times (e.g. "Europe/Zurich").
+    /// Defaults to the timezone declared in agency.txt, falling back to the system timezone.
+    #[arg(long)]
+    timezone: Option<String>,
 }
 
 #[tokio::main]
@@ -36,7 +41,7 @@ async fn main() -> eyre::Result<()> {
         .wrap_err_with(|| format!("opening GTFS archive {}", args.gtfs.display()))?;
 
     match args.stop {
-        Some(q) => show_schedule(&archive, &q, args.api_key.as_deref()).await?,
+        Some(q) => show_schedule(&archive, &q, args.api_key.as_deref(), args.timezone.as_deref()).await?,
         None => list_stops(&archive)?,
     }
 
@@ -56,6 +61,7 @@ async fn show_schedule(
     archive: &gtfs::GtfsArchive,
     query: &str,
     api_key: Option<&str>,
+    timezone: Option<&str>,
 ) -> eyre::Result<()> {
     let matches = archive.find_stops(query).wrap_err("searching stops")?;
 
@@ -63,26 +69,33 @@ async fn show_schedule(
         return Err(eyre::eyre!("no stops matching \"{query}\""));
     }
 
-    if matches.len() > 1 {
-        println!("Multiple stops match \"{query}\":");
+    let tz_name = match timezone {
+        Some(tz) => Some(tz.to_owned()),
+        None => archive.agency_timezone().wrap_err("reading agency timezone")?,
+    };
+    let now = Zoned::now();
+    let now = match tz_name.as_deref() {
+        Some(tz) => now.in_tz(tz).wrap_err_with(|| format!("unknown timezone \"{tz}\""))?,
+        None => now,
+    };
+
+    let active_services = archive
+        .active_service_ids(now.date())
+        .wrap_err("reading calendar")?;
+
+    let stop_ids: Vec<&str> = matches.iter().map(|s| s.stop_id.as_str()).collect();
+    let schedule = archive
+        .schedule_for_stops(&stop_ids, active_services.as_ref())
+        .wrap_err("building schedule")?;
+
+    if matches.len() == 1 {
+        println!("\nSchedule for {} ({}):", matches[0].stop_name, matches[0].stop_id);
+    } else {
+        println!("\nSchedule for \"{}\" ({} stops):", query, matches.len());
         for stop in &matches {
             println!("  [{}] {}", stop.stop_id, stop.stop_name);
         }
-        println!(
-            "\nShowing schedule for first match: {}",
-            matches[0].stop_name
-        );
     }
-
-    let stop_id = &matches[0].stop_id;
-    let schedule = archive
-        .schedule_for_stop(stop_id)
-        .wrap_err("building schedule")?;
-
-    println!(
-        "\nSchedule for {} ({}):",
-        schedule.stop.stop_name, schedule.stop.stop_id
-    );
 
     let realtime = if let Some(key) = api_key {
         realtime::fetch_trip_updates(key)
@@ -93,7 +106,6 @@ async fn show_schedule(
         None
     };
 
-    let now = Zoned::now();
     print_departures(&schedule, realtime.as_ref(), &now);
     Ok(())
 }
@@ -115,7 +127,7 @@ fn print_departures(
         let headsign = trip.trip_headsign.as_deref().unwrap_or("?");
         let rel = relative_time(st.departure_time, now);
         let status_str = feed
-            .and_then(|f| f.status_for(&trip.trip_id, &schedule.stop.stop_id))
+            .and_then(|f| f.status_for(&trip.trip_id, &st.stop_id))
             .map(|s| s.to_string())
             .unwrap_or_default();
 
@@ -126,7 +138,7 @@ fn print_departures(
     }
 }
 
-/// Returns "+Xm" (upcoming) or "Xm ago" (past) relative to `now`.
+/// Returns a human-readable duration relative to `now`: "now", "in 5m", "in 1h 30m", "3m ago".
 /// Uses today's service date; GTFS times ≥ 24h are treated as next-calendar-day departures.
 fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
     let tz = now.time_zone().clone();
@@ -134,11 +146,21 @@ fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
         return String::new();
     };
     let departure = midnight + i64::from(dep.as_secs()).seconds();
-    let diff_mins =
-        (departure.timestamp().as_second() - now.timestamp().as_second()) / 60;
-    if diff_mins >= 0 {
-        format!("+{diff_mins}m")
-    } else {
-        format!("{diff_mins}m ago", diff_mins = -diff_mins)
+    let diff_secs = departure.timestamp().as_second() - now.timestamp().as_second();
+    // Ceiling division for upcoming trains so "in 2m" is shown until the moment of departure,
+    // floor for past trains since they've already been gone that many whole minutes.
+    match diff_secs {
+        0 => "now".to_owned(),
+        1.. => format!("in {}", fmt_duration(((diff_secs + 59) / 60) as u64)),
+        _ => format!("{} ago", fmt_duration((-diff_secs / 60) as u64)),
+    }
+}
+
+fn fmt_duration(mins: u64) -> String {
+    let (h, m) = (mins / 60, mins % 60);
+    match (h, m) {
+        (0, m) => format!("{m}m"),
+        (h, 0) => format!("{h}h"),
+        (h, m) => format!("{h}h {m}m"),
     }
 }
