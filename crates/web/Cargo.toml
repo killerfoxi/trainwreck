@@ -1,0 +1,27 @@
+[package]
+name = "trainwreck-web"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+trainwreck-core = { path = "../core", features = ["web"] }
+
+leptos               = { version = "0.7", features = ["csr"] }
+wasm-bindgen         = "0.2"
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+
+gloo-file   = { version = "0.3", features = ["futures"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+
+web-sys = { version = "0.3", features = [
+    "File", "FileList", "FileReader",
+    "HtmlInputElement",
+    "Window", "Storage",
+    "DragEvent", "DataTransfer",
+] }
+js-sys = "0.3"
+jiff   = { version = "0.2.23", default-features = false, features = ["std"] }

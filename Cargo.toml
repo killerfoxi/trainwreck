@@ -1,19 +1,9 @@
-[package]
-name = "trainwreck"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["crates/core", "crates/cli", "crates/web"]
+resolver = "2"
 
-[dependencies]
-clap = { version = "4.6.0", features = ["derive", "env"] }
-color-eyre = "0.6.5"
-jiff = { version = "0.2.23", default-features = false, features = ["std", "tzdb-bundle-always"] }
-csv = "1.4.0"
-prost = { version = "0.14.3", default-features = false, features = ["derive", "std"] }
-reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
-serde = { version = "1.0.228", default-features = false, features = ["derive"] }
-thiserror = "2.0.18"
-tokio = { version = "1.50.0", default-features = false, features = ["macros", "rt-multi-thread"] }
-zip = { version = "8.5.0", default-features = false, features = ["deflate"] }
-
-[build-dependencies]
-prost-build = { version = "0.14.3", default-features = false }
+[profile.release]
+opt-level     = "z"
+lto           = true
+codegen-units = 1
+panic         = "abort"
