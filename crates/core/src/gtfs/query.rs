@@ -4,14 +4,15 @@ use super::model::{Route, StopTime, Trip};
 
 /// All trips serving a set of stops, with their routes resolved.
 pub struct StopSchedule {
-    pub stop_times: Vec<StopTime>,
-    pub trips: HashMap<String, Trip>,
-    pub routes: HashMap<String, Route>,
+    pub(crate) stop_times: Vec<StopTime>,
+    pub(crate) trips: HashMap<String, Trip>,
+    pub(crate) routes: HashMap<String, Route>,
 }
 
 impl StopSchedule {
     /// Iterate over departures sorted by departure time,
     /// yielding `(stop_time, trip, route)` tuples.
+    #[must_use]
     pub fn departures(&self) -> Vec<(&StopTime, &Trip, Option<&Route>)> {
         let mut deps: Vec<_> = self
             .stop_times

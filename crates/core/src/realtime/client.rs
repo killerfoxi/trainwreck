@@ -13,6 +13,11 @@ const TRIP_CANCELED: i32 = 3;
 // StopTimeUpdate.ScheduleRelationship::SKIPPED = 1
 const STOP_SKIPPED: i32 = 1;
 
+/// Fetch and decode a GTFS-RT `FeedMessage` from the OTD Swiss real-time endpoint.
+///
+/// # Errors
+/// Returns [`RealtimeError::Http`] on network or HTTP-status failure,
+/// or [`RealtimeError::Decode`] if the response body is not a valid protobuf `FeedMessage`.
 pub async fn fetch_trip_updates(api_key: &str) -> Result<RealtimeFeed, RealtimeError> {
     let bytes = reqwest::Client::new()
         .get(URL)

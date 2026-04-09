@@ -7,7 +7,7 @@ use jiff::civil::Date;
 use zip::ZipArchive;
 
 use super::error::GtfsError;
-use super::model::{Agency, Calendar, CalendarDate, Route, Stop, StopTime, Trip};
+use super::model::{Agency, Calendar, CalendarDate, ExceptionType, Route, Stop, StopTime, Trip};
 use super::query::StopSchedule;
 
 /// Handle to a GTFS ZIP archive.
@@ -20,6 +20,10 @@ pub struct GtfsArchive {
 
 impl GtfsArchive {
     /// Open a GTFS archive, validating that required files exist.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError::Open`] if the path cannot be opened or is not a valid ZIP,
+    /// or [`GtfsError::MissingFile`] if any required file is absent.
     pub fn open(path: &Path) -> Result<Self, GtfsError> {
         let file = File::open(path).map_err(|e| GtfsError::Open {
             path: path.to_path_buf(),
@@ -47,35 +51,30 @@ impl GtfsArchive {
     ///
     /// Per the GTFS spec, `agency_timezone` is required whenever `agency.txt` is present.
     /// See <https://gtfs.org/documentation/schedule/reference/#agency_timezone>.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if the ZIP entry cannot be read or the CSV is malformed.
     pub fn agency_timezone(&self) -> Result<Option<String>, GtfsError> {
-        let mut archive = self.archive()?;
-        let entry = match archive.by_name("agency.txt") {
-            Ok(e) => e,
-            Err(zip::result::ZipError::FileNotFound) => return Ok(None),
-            Err(e) => return Err(GtfsError::ReadEntry { name: "agency.txt", source: e }),
-        };
-        let mut buf = Vec::new();
-        BufReader::new(entry)
-            .read_to_end(&mut buf)
-            .map_err(|e| GtfsError::Csv { file: "agency.txt", source: e.into() })?;
-        Ok(csv::ReaderBuilder::new()
-            .flexible(true)
-            .from_reader(buf.as_slice())
-            .deserialize::<Agency>()
-            .next()
-            .transpose()
-            .map_err(|e| GtfsError::Csv { file: "agency.txt", source: e })?
+        Ok(self
+            .read_optional_csv::<Agency>("agency.txt")?
+            .and_then(|agencies| agencies.into_iter().next())
             .map(|a| a.agency_timezone))
     }
 
     /// List all stops in the archive.
     ///
     /// Streams `stops.txt` without loading the entire archive.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if the ZIP entry cannot be read or the CSV is malformed.
     pub fn stops(&self) -> Result<Vec<Stop>, GtfsError> {
         self.read_csv("stops.txt")
     }
 
     /// Search stops by name (case-insensitive substring match).
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if the ZIP entry cannot be read or the CSV is malformed.
     pub fn find_stops(&self, query: &str) -> Result<Vec<Stop>, GtfsError> {
         let query_lower = query.to_lowercase();
         self.read_csv_filtered("stops.txt", |s: &Stop| {
@@ -88,6 +87,9 @@ impl GtfsArchive {
     ///
     /// Applies both `calendar.txt` (regular schedule) and `calendar_dates.txt` (exceptions).
     /// See <https://gtfs.org/documentation/schedule/reference/#calendartxt>.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if any calendar CSV cannot be read or is malformed.
     pub fn active_service_ids(&self, date: Date) -> Result<Option<HashSet<String>>, GtfsError> {
         let date_str = format!(
             "{:04}{:02}{:02}",
@@ -123,9 +125,8 @@ impl GtfsArchive {
         if let Some(exceptions) = exceptions {
             for cd in exceptions {
                 match cd.exception_type {
-                    1 => { active.insert(cd.service_id); }
-                    2 => { active.remove(&cd.service_id); }
-                    _ => {}
+                    ExceptionType::Added   => { active.insert(cd.service_id); }
+                    ExceptionType::Removed => { active.remove(&cd.service_id); }
                 }
             }
         }
@@ -139,6 +140,9 @@ impl GtfsArchive {
     /// 1. Stream `stop_times.txt`, collecting rows for any of the given stop IDs.
     /// 2. Stream `trips.txt`, keeping only trips referenced above that are also in `active_services`.
     /// 3. Stream `routes.txt`, keeping only routes referenced by those trips.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if any CSV entry cannot be read or is malformed.
     pub fn schedule_for_stops(
         &self,
         stop_ids: &[&str],

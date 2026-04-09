@@ -148,9 +148,9 @@ fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
     // Ceiling division for upcoming trains so "in 2m" is shown until the moment of departure,
     // floor for past trains since they've already been gone that many whole minutes.
     match diff_secs {
-        0 => "now".to_owned(),
-        1.. => format!("in {}", fmt_duration(((diff_secs + 59) / 60).cast_unsigned())),
-        _ => format!("{} ago", fmt_duration((-diff_secs / 60).cast_unsigned())),
+        0    => "now".to_owned(),
+        1..  => format!("in {}", fmt_duration(((diff_secs + 59) / 60).cast_unsigned())),
+        ..0  => format!("{} ago", fmt_duration((-diff_secs / 60).cast_unsigned())),
     }
 }
 

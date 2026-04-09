@@ -11,8 +11,7 @@ pub fn compute_departures(state: &AppState) {
     if ids.is_empty() { return; }
 
     let stop_ids: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
-    let (y, m, d) = crate::time::today_ymd();
-    let date = jiff::civil::Date::new(y as i16, m as i8, d as i8).unwrap();
+    let date = crate::time::today_date();
     let active = gtfs.active_service_ids(date);
     let schedule = gtfs.schedule_for_stops(&stop_ids, active.as_ref());
 

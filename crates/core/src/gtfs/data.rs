@@ -12,7 +12,7 @@ use jiff::civil::Date;
 use zip::ZipArchive;
 
 use super::error::GtfsError;
-use super::model::{Agency, Calendar, CalendarDate, Route, Stop, StopTime, Trip};
+use super::model::{Agency, Calendar, CalendarDate, ExceptionType, Route, Stop, StopTime, Trip};
 use super::query::StopSchedule;
 
 #[derive(Clone)]
@@ -27,7 +27,11 @@ pub struct GtfsData {
 }
 
 impl GtfsData {
-    /// Parse a GTFS ZIP from a byte slice (e.g. a browser File upload).
+    /// Parse a GTFS ZIP from a byte slice (e.g. a browser `File` upload).
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if the bytes are not a valid ZIP, or if any
+    /// required CSV entry is missing or malformed.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, GtfsError> {
         let cursor = Cursor::new(bytes);
         let mut zip = ZipArchive::new(cursor).map_err(|e| GtfsError::Open {
@@ -62,6 +66,7 @@ impl GtfsData {
     }
 
     /// Case-insensitive substring search on stop names. Returns up to 30 matches.
+    #[must_use]
     pub fn find_stops(&self, query: &str) -> Vec<&Stop> {
         let q = query.to_lowercase();
         self.stops
@@ -72,6 +77,7 @@ impl GtfsData {
     }
 
     /// Service IDs active on `date`, or `None` if no calendar data is present.
+    #[must_use]
     pub fn active_service_ids(&self, date: Date) -> Option<HashSet<String>> {
         if self.calendars.is_empty() && self.calendar_dates.is_empty() {
             return None;
@@ -88,15 +94,15 @@ impl GtfsData {
         }
         for cd in self.calendar_dates.iter().filter(|cd| cd.date == date_str) {
             match cd.exception_type {
-                1 => { active.insert(cd.service_id.clone()); }
-                2 => { active.remove(&cd.service_id); }
-                _ => {}
+                ExceptionType::Added   => { active.insert(cd.service_id.clone()); }
+                ExceptionType::Removed => { active.remove(&cd.service_id); }
             }
         }
         Some(active)
     }
 
-    /// Build a `StopSchedule` from in-memory data (no I/O).
+    /// Build a [`StopSchedule`] from in-memory data (no I/O).
+    #[must_use]
     pub fn schedule_for_stops(
         &self,
         stop_ids: &[&str],
@@ -117,8 +123,7 @@ impl GtfsData {
             .filter(|(id, trip)| {
                 trip_ids.contains(id.as_str())
                     && active_services
-                        .map(|s| s.contains(&trip.service_id))
-                        .unwrap_or(true)
+                        .is_none_or(|s| s.contains(&trip.service_id))
             })
             .map(|(id, t)| (id.clone(), t.clone()))
             .collect();
@@ -135,10 +140,12 @@ impl GtfsData {
         StopSchedule { stop_times, trips, routes }
     }
 
+    #[must_use]
     pub fn agency_timezone(&self) -> Option<&str> {
         self.agency_timezone.as_deref()
     }
 
+    #[must_use]
     pub fn stop_count(&self) -> usize {
         self.stops.len()
     }

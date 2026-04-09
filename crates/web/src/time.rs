@@ -38,10 +38,10 @@ pub fn relative_time(departure_secs: u32, now_secs: u32) -> String {
     let diff = dep - now;
 
     match diff {
-        d if d < -60   => format!("{}m ago", (-d) / 60),
-        d if d <= 60   => "now".to_string(),
-        d => {
-            let mins = (d + 59) / 60; // ceiling for upcoming
+        ..=-61 => format!("{}m ago", (-diff) / 60),
+        -60..=60 => "now".to_string(),
+        _ => {
+            let mins = (diff + 59) / 60; // ceiling for upcoming
             if mins >= 60 {
                 format!("in {}h {}m", mins / 60, mins % 60)
             } else {

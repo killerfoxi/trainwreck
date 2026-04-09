@@ -13,6 +13,7 @@ use serde::Deserialize;
 pub struct GtfsTime(u32); // seconds since midnight of the service day
 
 impl GtfsTime {
+    #[must_use]
     pub fn as_secs(self) -> u32 {
         self.0
     }
@@ -86,32 +87,73 @@ pub struct Trip {
     pub trip_headsign: Option<String>,
 }
 
+/// Deserializes GTFS's `0`/`1` integer encoding of boolean flags.
+fn de_bool_int<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    u8::deserialize(d).map(|v| v != 0)
+}
+
 /// A service schedule defining which days a service operates.
 /// See <https://gtfs.org/documentation/schedule/reference/#calendartxt>.
+// The GTFS spec has one boolean column per weekday; the lint would push us
+// toward an abstraction that buys nothing over this straightforward mapping.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct Calendar {
     pub service_id: String,
-    pub monday: u8,
-    pub tuesday: u8,
-    pub wednesday: u8,
-    pub thursday: u8,
-    pub friday: u8,
-    pub saturday: u8,
-    pub sunday: u8,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub monday: bool,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub tuesday: bool,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub wednesday: bool,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub thursday: bool,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub friday: bool,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub saturday: bool,
+    #[serde(deserialize_with = "de_bool_int")]
+    pub sunday: bool,
     pub start_date: String, // YYYYMMDD
     pub end_date: String,   // YYYYMMDD
 }
 
 impl Calendar {
+    #[must_use]
     pub fn runs_on(&self, weekday: Weekday) -> bool {
         match weekday {
-            Weekday::Monday => self.monday == 1,
-            Weekday::Tuesday => self.tuesday == 1,
-            Weekday::Wednesday => self.wednesday == 1,
-            Weekday::Thursday => self.thursday == 1,
-            Weekday::Friday => self.friday == 1,
-            Weekday::Saturday => self.saturday == 1,
-            Weekday::Sunday => self.sunday == 1,
+            Weekday::Monday => self.monday,
+            Weekday::Tuesday => self.tuesday,
+            Weekday::Wednesday => self.wednesday,
+            Weekday::Thursday => self.thursday,
+            Weekday::Friday => self.friday,
+            Weekday::Saturday => self.saturday,
+            Weekday::Sunday => self.sunday,
+        }
+    }
+}
+
+/// Whether a service is added or removed on a particular date.
+/// See <https://gtfs.org/documentation/schedule/reference/#calendar_datestxt>.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "u8")]
+pub enum ExceptionType {
+    /// Service has been added for this date (`exception_type = 1`).
+    Added,
+    /// Service has been removed for this date (`exception_type = 2`).
+    Removed,
+}
+
+impl TryFrom<u8> for ExceptionType {
+    type Error = String;
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        match v {
+            1 => Ok(Self::Added),
+            2 => Ok(Self::Removed),
+            _ => Err(format!(
+                "invalid exception_type {v}: expected 1 (added) or 2 (removed)"
+            )),
         }
     }
 }
@@ -121,8 +163,8 @@ impl Calendar {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CalendarDate {
     pub service_id: String,
-    pub date: String,       // YYYYMMDD
-    pub exception_type: u8, // 1 = added, 2 = removed
+    pub date: String, // YYYYMMDD
+    pub exception_type: ExceptionType,
 }
 
 /// A transit agency (operator).
@@ -144,30 +186,31 @@ pub struct Route {
 }
 
 impl Route {
-    /// Map GTFS route_type integer to a display label.
+    /// Map GTFS `route_type` integer to a display label.
+    #[must_use]
     pub fn transport_label(&self) -> &'static str {
         match self.route_type {
-            Some(0)        => "Tram",
-            Some(1)        => "Subway",
-            Some(2)        => "Rail",
-            Some(3)        => "Bus",
-            Some(4)        => "Ferry",
-            Some(5)        => "Cable Car",
-            Some(6)        => "Gondola",
-            Some(7)        => "Funicular",
-            Some(11)       => "Trolleybus",
-            Some(100..=199)=> "Rail",
-            Some(700..=799)=> "Bus",
-            _              => "Transit",
+            Some(0)                  => "Tram",
+            Some(1)                  => "Subway",
+            Some(2 | 100..=199) => "Rail",
+            Some(3 | 700..=799) => "Bus",
+            Some(4)                  => "Ferry",
+            Some(5)                  => "Cable Car",
+            Some(6)                  => "Gondola",
+            Some(7)                  => "Funicular",
+            Some(11)                 => "Trolleybus",
+            _                        => "Transit",
         }
     }
 
     /// CSS class name for the route badge (used by the web frontend).
+    #[must_use]
     pub fn transport_css_class(&self) -> &'static str {
         Self::transport_css_class_for(self.route_type)
     }
 
-    /// CSS class name from a raw `route_type` value (avoids constructing a Route).
+    /// CSS class name from a raw `route_type` value (avoids constructing a [`Route`]).
+    #[must_use]
     pub fn transport_css_class_for(route_type: Option<u16>) -> &'static str {
         match route_type {
             Some(0 | 5 | 6 | 7 | 11) => "tram",

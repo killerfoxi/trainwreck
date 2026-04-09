@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-pub struct StopTimeStatus {
-    pub departure_delay_secs: Option<i32>,
-    pub skipped: bool,
+pub(crate) struct StopTimeStatus {
+    pub(crate) departure_delay_secs: Option<i32>,
+    pub(crate) skipped: bool,
 }
 
 #[derive(Debug, Clone)]
-pub enum TripStatus {
+pub(crate) enum TripStatus {
     Running(HashMap<String, StopTimeStatus>),
     Canceled,
 }
 
 #[derive(Debug, Clone)]
 pub struct RealtimeFeed {
-    pub trips: HashMap<String, TripStatus>,
+    pub(crate) trips: HashMap<String, TripStatus>,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +44,7 @@ impl std::fmt::Display for DepartureStatus {
 }
 
 impl RealtimeFeed {
+    #[must_use]
     pub fn status_for(&self, trip_id: &str, stop_id: &str) -> Option<DepartureStatus> {
         match self.trips.get(trip_id)? {
             TripStatus::Canceled => Some(DepartureStatus::Canceled),
