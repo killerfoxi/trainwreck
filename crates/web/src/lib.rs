@@ -17,6 +17,9 @@ use components::{
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();
+    if let Err(e) = api::init_base_url() {
+        leptos::logging::error!("Failed to initialise base URL: {e}");
+    }
     mount_to_body(App);
 }
 

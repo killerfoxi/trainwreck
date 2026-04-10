@@ -10,6 +10,11 @@ pub struct StopSchedule {
 }
 
 impl StopSchedule {
+    /// The set of stop IDs referenced by the collected stop-times.
+    pub fn stop_ids(&self) -> impl Iterator<Item = &str> {
+        self.stop_times.iter().map(|st| st.stop_id.as_str())
+    }
+
     /// Iterate over departures sorted by departure time,
     /// yielding `(stop_time, trip, route)` tuples.
     #[must_use]

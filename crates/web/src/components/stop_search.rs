@@ -25,6 +25,7 @@ pub(crate) fn build_rows(deps: Vec<ApiDeparture>) -> Vec<DepartureRow> {
             delay_secs: d.delay_secs,
             canceled: d.canceled,
             skipped: d.skipped,
+            platform: d.platform,
         })
         .collect();
     rows.sort_unstable_by_key(|r| r.departure_secs);
@@ -37,6 +38,7 @@ pub fn StopSearch() -> impl IntoView {
 
     // Generation counter to debounce: stale closures skip if a newer input arrived.
     let generation = RwSignal::new(0u32);
+    let searching = RwSignal::new(false);
 
     let on_input = move |ev: web_sys::Event| {
         use wasm_bindgen::JsCast;
@@ -61,10 +63,12 @@ pub fn StopSearch() -> impl IntoView {
             if generation.get() != this_gen {
                 return;
             }
+            searching.set(true);
             match fetch_stops(&val).await {
                 Ok(stops) => state.matched_stops.set(stops),
                 Err(e) => state.error.set(Some(format!("Stop search failed: {e}"))),
             }
+            searching.set(false);
         });
     };
 
@@ -94,29 +98,51 @@ pub fn StopSearch() -> impl IntoView {
                 prop:value=move || state.stop_query.get()
                 on:input=on_input
             />
-            <ul class="stop-list">
-                <For
-                    each=move || state.matched_stops.get()
-                    key=|s| s.stop_id.clone()
-                    children=move |stop| {
-                        let stop_clone = stop.clone();
-                        let is_selected = {
-                            let id = stop.stop_id.clone();
-                            move || state.selected_stop_ids.get().contains(&id)
-                        };
-                        view! {
-                            <li
-                                class="stop-item"
-                                class:selected=is_selected
-                                on:click=move |_| select_stop(stop_clone.clone())
-                            >
-                                <span class="stop-name">{stop.stop_name.clone()}</span>
-                                <span class="stop-id">{stop.stop_id.clone()}</span>
-                            </li>
-                        }
-                    }
-                />
-            </ul>
+            <Show
+                when=move || searching.get()
+                fallback=move || view! {
+                    <ul class="stop-list">
+                        <For
+                            each=move || state.matched_stops.get()
+                            key=|s| s.stop_id.clone()
+                            children=move |stop| {
+                                let stop_clone = stop.clone();
+                                let is_selected = {
+                                    let id = stop.stop_id.clone();
+                                    move || state.selected_stop_ids.get().contains(&id)
+                                };
+                                view! {
+                                    <li
+                                        class="stop-item"
+                                        class:selected=is_selected
+                                        on:click=move |_| select_stop(stop_clone.clone())
+                                    >
+                                        <span class="stop-name">{stop.stop_name.clone()}</span>
+                                        <span class="stop-id">{stop.stop_id.clone()}</span>
+                                    </li>
+                                }
+                            }
+                        />
+                    </ul>
+                }
+            >
+                {skeleton_stops()}
+            </Show>
         </div>
+    }
+}
+
+fn skeleton_stops() -> impl IntoView {
+    // Vary name widths so the skeleton looks like real content.
+    let name_widths = ["70%", "85%", "60%", "75%"];
+    view! {
+        <ul class="stop-list">
+            {name_widths.iter().map(|&w| view! {
+                <li class="stop-item">
+                    <div class="skeleton skel-stop-name" style={format!("width:{w}")}></div>
+                    <div class="skeleton skel-stop-id"></div>
+                </li>
+            }).collect::<Vec<_>>()}
+        </ul>
     }
 }

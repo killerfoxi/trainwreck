@@ -213,12 +213,12 @@ a:hover { text-decoration: underline; }
 
 /* ── Departure list ──────────────────────────────────────────────────────── */
 /*
-  5-column grid:
-  [time] [relative] [route badge] [destination] [status]
+  6-column grid:
+  [time] [relative] [route badge] [destination] [platform] [status]
 */
 .departure-list {
   display: grid;
-  grid-template-columns: 5ch 7ch auto 1fr auto;
+  grid-template-columns: 5ch 7ch auto 1fr auto auto;
   gap: 0.2rem 0.85rem;
   align-items: center;
 }
@@ -259,6 +259,12 @@ a:hover { text-decoration: underline; }
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.875rem;
+}
+
+.dep-platform {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .status-badge {
@@ -320,6 +326,36 @@ a:hover { text-decoration: underline; }
   font-size: 0.875rem;
 }
 
+/* ── Skeleton loader ─────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface) 25%,
+    var(--surface-hover) 50%,
+    var(--surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 3px;
+}
+
+/* Departure row skeleton cells — sized to match departure-list grid columns */
+.skel-time     { height: 0.95em; }
+.skel-rel      { height: 0.8em;  width: 60%; }
+.skel-badge    { height: 1.1em;  width: 2.5rem; }
+.skel-dest     { height: 0.9em; }
+.skel-platform { height: 0.8em;  width: 3rem; }
+.skel-status   { height: 0.8em;  width: 2rem; }
+
+/* Stop list skeleton cells */
+.skel-stop-name { height: 0.875em; }
+.skel-stop-id   { height: 0.7em;   width: 4rem; }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 700px) {
   .main {
@@ -333,6 +369,7 @@ a:hover { text-decoration: underline; }
   .departure-list {
     grid-template-columns: 5ch 7ch auto 1fr;
   }
-  /* Hide status on very small screens */
+  /* Hide platform and status on very small screens */
+  .dep-platform { display: none; }
   .status-badge { display: none; }
 }

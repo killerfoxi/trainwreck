@@ -76,6 +76,14 @@ impl GtfsData {
             .collect()
     }
 
+    /// Expand a set of stop IDs to include their full station family.
+    ///
+    /// See [`super::archive::expand_family`] for the expansion logic.
+    #[must_use]
+    pub fn expand_stop_ids(&self, stop_ids: &HashSet<&str>) -> HashSet<String> {
+        super::archive::expand_family(stop_ids, &self.stops)
+    }
+
     /// Service IDs active on `date`, or `None` if no calendar data is present.
     #[must_use]
     pub fn active_service_ids(&self, date: Date) -> Option<HashSet<String>> {

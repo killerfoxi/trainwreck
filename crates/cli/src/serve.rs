@@ -49,6 +49,10 @@ struct DepartureItem {
     delay_secs: Option<i32>,
     canceled: bool,
     skipped: bool,
+    /// Platform/track identifier, when the stop is a child of a parent station.
+    /// Prefers `platform_code` from the feed; falls back to the stop's full name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    platform: Option<String>,
 }
 
 // ── query param types ─────────────────────────────────────────────────────────
@@ -89,6 +93,10 @@ async fn stops_handler(
     Ok(Json(
         stops
             .into_iter()
+            // Only expose top-level stops: parent stations (location_type=1) and
+            // standalone stops with no parent.  Individual platforms are shown in
+            // the departure table, not the search list.
+            .filter(|s| s.parent_station.as_deref().unwrap_or("").is_empty())
             .map(|s| StopItem { stop_id: s.stop_id, stop_name: s.stop_name })
             .collect(),
     ))
@@ -125,10 +133,23 @@ async fn schedule_handler(
     };
 
     let active_services = state.gtfs.active_service_ids(now.date()).map_err(api_err)?;
+
+    // Expand to the full station family: given any stop in a parent/child
+    // hierarchy, include the parent, all siblings, and all children so that
+    // stop_times (attached to platforms) are always found.
+    let stop_id_set: std::collections::HashSet<&str> = stop_ids.iter().copied().collect();
+    let expanded = state.gtfs.expand_stop_ids(&stop_id_set).map_err(api_err)?;
+    let all_stop_ids: Vec<&str> = expanded.iter().map(String::as_str).collect();
+
     let schedule = state
         .gtfs
-        .schedule_for_stops(&stop_ids, active_services.as_ref())
+        .schedule_for_stops(&all_stop_ids, active_services.as_ref())
         .map_err(api_err)?;
+
+    // Look up stop records for the stops actually referenced by the schedule so
+    // we can attach platform information to each departure.
+    let schedule_stop_ids: std::collections::HashSet<&str> = schedule.stop_ids().collect();
+    let stop_map = state.gtfs.stops_by_ids(&schedule_stop_ids).map_err(api_err)?;
 
     // Fetch real-time data if an API key is configured; failures are non-fatal.
     let feed = if let Some(key) = &state.api_key {
@@ -160,6 +181,20 @@ async fn schedule_handler(
                     DepartureStatus::OnTime { delay_secs } => (Some(delay_secs), false, false),
                 });
 
+            // Derive platform label: prefer explicit platform_code, fall back to
+            // the stop's own name (only when it is a child of a parent station).
+            let platform = stop_map.get(&st.stop_id).and_then(|stop| {
+                if let Some(ref pc) = stop.platform_code {
+                    if !pc.is_empty() {
+                        return Some(pc.clone());
+                    }
+                }
+                if stop.parent_station.as_deref().is_some_and(|p| !p.is_empty()) {
+                    return Some(stop.stop_name.clone());
+                }
+                None
+            });
+
             DepartureItem {
                 trip_id: trip.trip_id.clone(),
                 stop_id: st.stop_id.clone(),
@@ -170,6 +205,7 @@ async fn schedule_handler(
                 delay_secs,
                 canceled,
                 skipped,
+                platform,
             }
         })
         .collect();

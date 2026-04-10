@@ -2938,6 +2938,7 @@ dependencies = [
  "reqwest",
  "serde",
  "trainwreck-core",
+ "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

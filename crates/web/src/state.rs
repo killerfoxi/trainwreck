@@ -17,6 +17,7 @@ pub struct DepartureRow {
     pub delay_secs: Option<i32>,
     pub canceled: bool,
     pub skipped: bool,
+    pub platform: Option<String>,
 }
 
 /// Reactive application state shared across all components via context.

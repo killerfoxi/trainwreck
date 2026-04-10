@@ -82,6 +82,40 @@ impl GtfsArchive {
         })
     }
 
+    /// Fetch the [`Stop`] records for a given set of stop IDs.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if `stops.txt` cannot be read or parsed.
+    pub fn stops_by_ids(
+        &self,
+        ids: &HashSet<&str>,
+    ) -> Result<std::collections::HashMap<String, Stop>, GtfsError> {
+        let stops: Vec<Stop> =
+            self.read_csv_filtered("stops.txt", |s: &Stop| ids.contains(s.stop_id.as_str()))?;
+        Ok(stops.into_iter().map(|s| (s.stop_id.clone(), s)).collect())
+    }
+
+    /// Expand a set of stop IDs to include their full station family.
+    ///
+    /// GTFS feeds often split a station into a parent (location_type=1) and
+    /// child platforms (location_type=0). Stop-times are attached to platforms,
+    /// not the parent. Given a set of selected stop IDs this method:
+    ///
+    /// 1. Locates the parent station of each selected stop (if any).
+    /// 2. Adds all siblings — other children of those same parents.
+    /// 3. Adds direct children of any selected stop that is itself a parent.
+    ///
+    /// The result is the union of all related stops, so querying the schedule
+    /// with it returns departures regardless of which stop in a station group
+    /// the user selected.
+    ///
+    /// # Errors
+    /// Returns [`GtfsError`] if `stops.txt` cannot be read or parsed.
+    pub fn expand_stop_ids(&self, stop_ids: &HashSet<&str>) -> Result<HashSet<String>, GtfsError> {
+        let all_stops: Vec<Stop> = self.read_csv("stops.txt")?;
+        Ok(expand_family(stop_ids, &all_stops))
+    }
+
     /// Return the set of `service_id`s active on `date`, or `None` if the archive
     /// contains no calendar data (in which case callers should treat all services as active).
     ///
@@ -256,4 +290,41 @@ impl GtfsArchive {
             })
             .collect()
     }
+}
+
+// ── shared stop-family expansion ──────────────────────────────────────────────
+
+/// Given a set of stop IDs and the full stop list, return the union of:
+/// - the selected stops themselves
+/// - their parent stations (if any)
+/// - all children of those parents (siblings of the selected stops)
+/// - all direct children of the selected stops (if they are themselves parents)
+///
+/// This ensures that selecting any stop in a station hierarchy (parent station,
+/// platform, or entrance) returns the full set of stops with actual stop-times.
+pub(super) fn expand_family(stop_ids: &HashSet<&str>, all_stops: &[Stop]) -> HashSet<String> {
+    // Collect parent_station IDs of the selected stops.
+    let parents: HashSet<&str> = all_stops
+        .iter()
+        .filter(|s| stop_ids.contains(s.stop_id.as_str()))
+        .filter_map(|s| s.parent_station.as_deref())
+        .filter(|p| !p.is_empty())
+        .collect();
+
+    // A stop belongs in the expanded set if:
+    // - it was directly selected, OR
+    // - it is a parent of a selected stop, OR
+    // - its parent_station is one of the selected stops or their parents (sibling/child).
+    all_stops
+        .iter()
+        .filter(|s| {
+            let id = s.stop_id.as_str();
+            let parent = s.parent_station.as_deref().unwrap_or("");
+            stop_ids.contains(id)
+                || parents.contains(id)
+                || stop_ids.contains(parent)
+                || parents.contains(parent)
+        })
+        .map(|s| s.stop_id.clone())
+        .collect()
 }

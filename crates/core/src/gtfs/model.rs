@@ -67,6 +67,15 @@ impl std::fmt::Display for GtfsTime {
 pub struct Stop {
     pub stop_id: String,
     pub stop_name: String,
+    /// GTFS `location_type`: 0/missing = stop/platform, 1 = station, 2 = entrance, …
+    #[serde(default)]
+    pub location_type: Option<u8>,
+    /// ID of the parent station, if this stop is a child platform.
+    #[serde(default)]
+    pub parent_station: Option<String>,
+    /// Short platform/track code (e.g. `"3"`, `"2A"`), when provided by the feed.
+    #[serde(default)]
+    pub platform_code: Option<String>,
 }
 
 /// A scheduled stop-time linking a trip to a stop.

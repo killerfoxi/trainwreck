@@ -47,7 +47,13 @@ pub fn DepartureBoard() -> impl IntoView {
 
                 <Show
                     when=move || !state.departures.get().is_empty()
-                    fallback=|| view! { <p class="no-deps">"No departures found."</p> }
+                    fallback=move || {
+                        if state.loading.get() {
+                            skeleton_departures().into_any()
+                        } else {
+                            view! { <p class="no-deps">"No departures found."</p> }.into_any()
+                        }
+                    }
                 >
                     <div class="departure-list">
                         <For
@@ -64,6 +70,7 @@ pub fn DepartureBoard() -> impl IntoView {
                                     <span class="dep-rel">{rel}</span>
                                     <span class={format!("route-badge {css}")}>{row.route_name}</span>
                                     <span class="dep-dest">{row.destination}</span>
+                                    <span class="dep-platform">{row.platform.unwrap_or_default()}</span>
                                     <span class={format!("status-badge {status_class}")}>{status_text}</span>
                                 }
                             }
@@ -75,6 +82,23 @@ pub fn DepartureBoard() -> impl IntoView {
             <Show when=move || state.error.get().is_some()>
                 <p class="error-msg">{move || state.error.get().unwrap_or_default()}</p>
             </Show>
+        </div>
+    }
+}
+
+fn skeleton_departures() -> impl IntoView {
+    // Vary destination widths so the skeleton looks like real content.
+    let dest_widths = ["65%", "80%", "55%", "75%", "60%", "70%"];
+    view! {
+        <div class="departure-list">
+            {dest_widths.iter().map(|&w| view! {
+                <div class="skeleton skel-time"></div>
+                <div class="skeleton skel-rel"></div>
+                <div class="skeleton skel-badge"></div>
+                <div class="skeleton skel-dest" style={format!("width:{w}")}></div>
+                <div class="skeleton skel-platform"></div>
+                <div class="skeleton skel-status"></div>
+            }).collect::<Vec<_>>()}
         </div>
     }
 }
