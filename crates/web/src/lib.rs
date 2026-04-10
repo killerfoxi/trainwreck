@@ -1,3 +1,5 @@
+#![deny(clippy::pedantic)]
+
 pub mod api;
 mod components;
 pub mod state;

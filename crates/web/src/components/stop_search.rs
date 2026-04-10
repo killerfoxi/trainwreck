@@ -1,13 +1,13 @@
 use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
 
-use crate::api::{ApiStop, fetch_schedule, fetch_stops};
+use crate::api::{ApiDeparture, ApiStop, fetch_schedule, fetch_stops};
 use crate::state::{AppState, DepartureRow};
 use crate::time;
 
-/// Build a sorted list of upcoming `DepartureRow`s from the API response,
+/// Build a sorted list of upcoming [`DepartureRow`]s from the API response,
 /// keeping only departures within 1 minute ago and up to 3 hours ahead.
-pub fn build_rows(deps: Vec<crate::api::ApiDeparture>) -> Vec<DepartureRow> {
+pub(crate) fn build_rows(deps: Vec<ApiDeparture>) -> Vec<DepartureRow> {
     let now = i64::from(time::now_secs_since_midnight());
     let mut rows: Vec<DepartureRow> = deps
         .into_iter()
@@ -33,19 +33,18 @@ pub fn build_rows(deps: Vec<crate::api::ApiDeparture>) -> Vec<DepartureRow> {
 
 #[component]
 pub fn StopSearch() -> impl IntoView {
-    let state = use_context::<AppState>().unwrap();
+    let state = use_context::<AppState>().expect("AppState must be provided");
 
     // Generation counter to debounce: stale closures skip if a newer input arrived.
     let generation = RwSignal::new(0u32);
 
     let on_input = move |ev: web_sys::Event| {
         use wasm_bindgen::JsCast;
-        let val = ev
-            .target()
-            .unwrap()
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .unwrap()
-            .value();
+
+        let Some(target) = ev.target() else { return };
+        let Ok(input) = target.dyn_into::<web_sys::HtmlInputElement>() else { return };
+        let val = input.value();
+
         state.stop_query.set(val.clone());
 
         if val.is_empty() {

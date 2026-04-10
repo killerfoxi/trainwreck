@@ -1,13 +1,13 @@
 use leptos::prelude::*;
 
 use crate::api::fetch_schedule;
+use crate::components::stop_search::build_rows;
 use crate::state::{AppState, DepartureRow};
 use crate::time;
-use crate::components::stop_search::build_rows;
 
 #[component]
 pub fn DepartureBoard() -> impl IntoView {
-    let state = use_context::<AppState>().unwrap();
+    let state = use_context::<AppState>().expect("AppState must be provided");
 
     let refresh = move |_| {
         let ids = state.selected_stop_ids.get();
