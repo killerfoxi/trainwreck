@@ -7,21 +7,23 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-trainwreck-core = { path = "../core", features = ["web"] }
+# Core is still needed for Route::transport_css_class_for used in the UI.
+# The `web` feature (GtfsData) is no longer required — data comes from the server.
+trainwreck-core = { path = "../core" }
 
 leptos               = { version = "0.8", features = ["csr"] }
 wasm-bindgen         = "0.2"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
 
-gloo-file   = { version = "0.4", features = ["futures"] }
 gloo-timers = { version = "0.4", features = ["futures"] }
 
 web-sys = { version = "0.3", features = [
-    "File", "FileList", "FileReader",
     "HtmlInputElement",
-    "Window", "Storage",
-    "DragEvent", "DataTransfer",
 ] }
-js-sys = "0.3"
-jiff   = { version = "0.2.23", default-features = false, features = ["std"] }
+js-sys   = "0.3"
+serde    = { version = "1.0", default-features = false, features = ["derive"] }
+jiff     = { version = "0.2.23", default-features = false, features = ["std"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.13.2", default-features = false, features = ["json"] }

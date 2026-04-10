@@ -1,3 +1,4 @@
+pub mod api;
 mod components;
 pub mod state;
 pub mod time;
@@ -7,8 +8,6 @@ use leptos::prelude::*;
 use state::AppState;
 use components::{
     header::Header,
-    file_upload::FileUpload,
-    api_key::ApiKeyInput,
     stop_search::StopSearch,
     departure_board::DepartureBoard,
 };
@@ -27,8 +26,6 @@ fn App() -> impl IntoView {
             <Header/>
             <div class="main">
                 <aside class="sidebar">
-                    <FileUpload/>
-                    <ApiKeyInput/>
                     <StopSearch/>
                 </aside>
                 <DepartureBoard/>

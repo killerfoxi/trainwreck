@@ -1,12 +1,15 @@
 #![deny(clippy::pedantic)]
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use color_eyre::eyre::{self, WrapErr};
 use jiff::{ToSpan as _, Zoned};
 use trainwreck_core::gtfs;
 use trainwreck_core::realtime;
+
+mod serve;
 
 #[derive(Parser)]
 #[command(
@@ -14,20 +17,57 @@ use trainwreck_core::realtime;
     about = "Display GTFS transit schedules with optional real-time updates"
 )]
 struct Args {
-    /// Path to a GTFS zip archive
-    gtfs: PathBuf,
+    #[command(subcommand)]
+    command: Command,
+}
 
-    /// Stop name to search for (omit to list all stops)
-    stop: Option<String>,
+#[derive(Subcommand)]
+enum Command {
+    /// Query the schedule and print departures to stdout.
+    Query {
+        /// Path to a GTFS zip archive
+        gtfs: PathBuf,
 
-    /// API key for real-time data (or set `OTD_API_KEY` env var)
-    #[arg(long, env = "OTD_API_KEY")]
-    api_key: Option<String>,
+        /// Stop name to search for (omit to list all stops)
+        stop: Option<String>,
 
-    /// IANA timezone for interpreting GTFS departure times (e.g. "Europe/Zurich").
-    /// Defaults to the timezone declared in agency.txt, falling back to the system timezone.
-    #[arg(long)]
-    timezone: Option<String>,
+        /// API key for real-time data (or set `OTD_API_KEY` env var)
+        #[arg(long, env = "OTD_API_KEY")]
+        api_key: Option<String>,
+
+        /// IANA timezone for interpreting GTFS departure times (e.g. "Europe/Zurich").
+        /// Defaults to the timezone declared in agency.txt, falling back to the system timezone.
+        #[arg(long)]
+        timezone: Option<String>,
+    },
+
+    /// Start an HTTP server with a JSON REST API and optional web interface.
+    Web {
+        /// Path to a GTFS zip archive
+        gtfs: PathBuf,
+
+        /// API key for real-time data (or set `OTD_API_KEY` env var)
+        #[arg(long, env = "OTD_API_KEY")]
+        api_key: Option<String>,
+
+        /// IANA timezone for interpreting GTFS departure times (e.g. "Europe/Zurich").
+        /// Defaults to the timezone declared in agency.txt, falling back to the system timezone.
+        #[arg(long)]
+        timezone: Option<String>,
+
+        /// Port to listen on
+        #[arg(long, default_value = "3000")]
+        port: u16,
+
+        /// Address to bind to
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+
+        /// Directory containing the built web app (Trunk output).
+        /// Falls back to a built-in API info page when omitted.
+        #[arg(long)]
+        web_dir: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -36,12 +76,26 @@ async fn main() -> eyre::Result<()> {
 
     let args = Args::parse();
 
-    let archive = gtfs::GtfsArchive::open(&args.gtfs)
-        .wrap_err_with(|| format!("opening GTFS archive {}", args.gtfs.display()))?;
-
-    match args.stop {
-        Some(q) => show_schedule(&archive, &q, args.api_key.as_deref(), args.timezone.as_deref()).await?,
-        None => list_stops(&archive)?,
+    match args.command {
+        Command::Query { gtfs, stop, api_key, timezone } => {
+            let archive = gtfs::GtfsArchive::open(&gtfs)
+                .wrap_err_with(|| format!("opening GTFS archive {}", gtfs.display()))?;
+            match stop {
+                Some(q) => {
+                    show_schedule(&archive, &q, api_key.as_deref(), timezone.as_deref()).await?;
+                }
+                None => list_stops(&archive)?,
+            }
+        }
+        Command::Web { gtfs, api_key, timezone, port, bind, web_dir } => {
+            let archive = gtfs::GtfsArchive::open(&gtfs)
+                .wrap_err_with(|| format!("opening GTFS archive {}", gtfs.display()))?;
+            let addr: SocketAddr = format!("{bind}:{port}")
+                .parse()
+                .wrap_err("invalid bind address")?;
+            let state = serve::ServerState { gtfs: archive, api_key, timezone };
+            serve::run_server(state, addr, web_dir).await?;
+        }
     }
 
     Ok(())
@@ -90,7 +144,7 @@ async fn show_schedule(
     if matches.len() == 1 {
         println!("\nSchedule for {} ({}):", matches[0].stop_name, matches[0].stop_id);
     } else {
-        println!("\nSchedule for \"{}\" ({} stops):", query, matches.len());
+        println!("\nSchedule for \"{query}\" ({} stops):", matches.len());
         for stop in &matches {
             println!("  [{}] {}", stop.stop_id, stop.stop_name);
         }
@@ -148,9 +202,9 @@ fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
     // Ceiling division for upcoming trains so "in 2m" is shown until the moment of departure,
     // floor for past trains since they've already been gone that many whole minutes.
     match diff_secs {
-        0    => "now".to_owned(),
-        1..  => format!("in {}", fmt_duration(((diff_secs + 59) / 60).cast_unsigned())),
-        ..0  => format!("{} ago", fmt_duration((-diff_secs / 60).cast_unsigned())),
+        0 => "now".to_owned(),
+        1.. => format!("in {}", fmt_duration(((diff_secs + 59) / 60).cast_unsigned())),
+        ..0 => format!("{} ago", fmt_duration((-diff_secs / 60).cast_unsigned())),
     }
 }
 
