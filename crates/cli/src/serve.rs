@@ -213,7 +213,7 @@ async fn schedule_handler(
     Ok(Json(items))
 }
 
-async fn fallback_index() -> impl IntoResponse {
+fn fallback_html() -> Html<&'static str> {
     Html(concat!(
         "<!DOCTYPE html><html lang=\"en\"><head>",
         "<meta charset=\"utf-8\">",
@@ -221,9 +221,10 @@ async fn fallback_index() -> impl IntoResponse {
         "<style>body{font-family:monospace;max-width:600px;margin:2rem auto}</style>",
         "</head><body>",
         "<h1>trainwreck API server</h1>",
-        "<p>The web UI is not built yet. Run <code>trunk build</code> inside ",
-        "<code>crates/web/</code>, then restart with ",
-        "<code>--web-dir crates/web/dist</code>.</p>",
+        "<p>The web UI is not embedded in this build. Rebuild with:",
+        "<pre>cargo build -p trainwreck --release --features embed-web</pre>",
+        "or pass <code>--web-dir crates/web/dist</code> after running ",
+        "<code>trunk build</code> in <code>crates/web/</code>.</p>",
         "<h2>REST API</h2>",
         "<ul>",
         "<li><code>GET /api/stops?q=query</code> — search stops by name</li>",
@@ -231,6 +232,41 @@ async fn fallback_index() -> impl IntoResponse {
         "</ul>",
         "</body></html>",
     ))
+}
+
+async fn fallback_index() -> impl IntoResponse {
+    fallback_html()
+}
+
+#[cfg(feature = "embed-web")]
+mod embedded {
+    #[derive(rust_embed::Embed)]
+    #[folder = "../web/dist"]
+    pub struct WebAssets;
+}
+
+#[cfg(feature = "embed-web")]
+fn serve_asset(path: &str) -> Option<axum::response::Response> {
+    let file = embedded::WebAssets::get(path)?;
+    let content_type = match path.rsplit_once('.').map(|(_, e)| e) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("wasm") => "application/wasm",
+        Some("js") | Some("mjs") => "application/javascript",
+        Some("css") => "text/css",
+        _ => "application/octet-stream",
+    };
+    Some(
+        ([("content-type", content_type)], file.data.into_owned()).into_response(),
+    )
+}
+
+#[cfg(feature = "embed-web")]
+async fn serve_embedded(uri: axum::http::Uri) -> axum::response::Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    serve_asset(path)
+        .or_else(|| serve_asset("index.html"))
+        .unwrap_or_else(|| fallback_html().into_response())
 }
 
 // ── server entry point ────────────────────────────────────────────────────────
@@ -262,7 +298,13 @@ pub async fn run_server(
             let index = ServeFile::new(dir.join("index.html"));
             app.fallback_service(ServeDir::new(&dir).not_found_service(index))
         }
-        None => app.route("/", get(fallback_index)),
+        None => {
+            #[cfg(feature = "embed-web")]
+            let app = app.fallback(serve_embedded);
+            #[cfg(not(feature = "embed-web"))]
+            let app = app.route("/", get(fallback_index));
+            app
+        }
     };
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

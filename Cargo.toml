@@ -1,6 +1,7 @@
 [workspace]
-members = ["crates/core", "crates/cli", "crates/web"]
-resolver = "2"
+members  = ["crates/core", "crates/cli"]
+exclude  = ["crates/web"]
+resolver = "3"
 
 [profile.release]
 opt-level     = "z"
