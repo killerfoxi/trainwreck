@@ -63,7 +63,7 @@ pub struct ApiDeparture {
 /// `reqwest::Error::to_string()` only shows the top-level kind (e.g.
 /// "builder error") and drops the underlying cause.  Walking the chain gives
 /// the user something actionable.
-fn fmt_err(e: reqwest::Error) -> String {
+fn fmt_err(e: &reqwest::Error) -> String {
     use std::error::Error as _;
     let mut msg = e.to_string();
     let mut source = e.source();
@@ -87,10 +87,10 @@ pub async fn fetch_stops(query: &str) -> Result<Vec<ApiStop>, String> {
     url.query_pairs_mut().append_pair("q", query);
     reqwest::get(url.as_str())
         .await
-        .map_err(fmt_err)?
+        .map_err(|e| fmt_err(&e))?
         .json::<Vec<ApiStop>>()
         .await
-        .map_err(fmt_err)
+        .map_err(|e| fmt_err(&e))
 }
 
 /// Fetch departures for the given stop IDs from the server.
@@ -106,8 +106,8 @@ pub async fn fetch_schedule(stop_ids: &[String]) -> Result<Vec<ApiDeparture>, St
     url.query_pairs_mut().append_pair("stop_ids", &stop_ids.join(","));
     reqwest::get(url.as_str())
         .await
-        .map_err(fmt_err)?
+        .map_err(|e| fmt_err(&e))?
         .json::<Vec<ApiDeparture>>()
         .await
-        .map_err(fmt_err)
+        .map_err(|e| fmt_err(&e))
 }

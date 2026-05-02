@@ -97,8 +97,8 @@ impl GtfsArchive {
 
     /// Expand a set of stop IDs to include their full station family.
     ///
-    /// GTFS feeds often split a station into a parent (location_type=1) and
-    /// child platforms (location_type=0). Stop-times are attached to platforms,
+    /// GTFS feeds often split a station into a parent (`location_type=1`) and
+    /// child platforms (`location_type=0`). Stop-times are attached to platforms,
     /// not the parent. Given a set of selected stop IDs this method:
     ///
     /// 1. Locates the parent station of each selected stop (if any).
@@ -125,15 +125,10 @@ impl GtfsArchive {
     /// # Errors
     /// Returns [`GtfsError`] if any calendar CSV cannot be read or is malformed.
     pub fn active_service_ids(&self, date: Date) -> Result<Option<HashSet<String>>, GtfsError> {
-        let date_str = format!(
-            "{:04}{:02}{:02}",
-            date.year(),
-            date.month(),
-            date.day(),
-        );
+        let date_str = format!("{:04}{:02}{:02}", date.year(), date.month(), date.day());
         let calendars = self.read_optional_csv::<Calendar>("calendar.txt")?;
-        let exceptions =
-            self.read_optional_csv_filtered::<CalendarDate>("calendar_dates.txt", |cd| {
+        let exceptions = self
+            .read_optional_csv_filtered::<CalendarDate>("calendar_dates.txt", |cd| {
                 cd.date == date_str
             })?;
 
@@ -159,8 +154,12 @@ impl GtfsArchive {
         if let Some(exceptions) = exceptions {
             for cd in exceptions {
                 match cd.exception_type {
-                    ExceptionType::Added   => { active.insert(cd.service_id); }
-                    ExceptionType::Removed => { active.remove(&cd.service_id); }
+                    ExceptionType::Added => {
+                        active.insert(cd.service_id);
+                    }
+                    ExceptionType::Removed => {
+                        active.remove(&cd.service_id);
+                    }
                 }
             }
         }
@@ -182,9 +181,10 @@ impl GtfsArchive {
         stop_ids: &[&str],
         active_services: Option<&HashSet<String>>,
     ) -> Result<StopSchedule, GtfsError> {
-        let stop_times: Vec<StopTime> = self.read_csv_filtered("stop_times.txt", |st: &StopTime| {
-            stop_ids.contains(&st.stop_id.as_str())
-        })?;
+        let stop_times: Vec<StopTime> = self
+            .read_csv_filtered("stop_times.txt", |st: &StopTime| {
+                stop_ids.contains(&st.stop_id.as_str())
+            })?;
 
         let trip_ids: HashSet<&str> = stop_times.iter().map(|st| st.trip_id.as_str()).collect();
 
@@ -202,7 +202,10 @@ impl GtfsArchive {
         Ok(StopSchedule {
             stop_times,
             trips: trips.into_iter().map(|t| (t.trip_id.clone(), t)).collect(),
-            routes: routes.into_iter().map(|r| (r.route_id.clone(), r)).collect(),
+            routes: routes
+                .into_iter()
+                .map(|r| (r.route_id.clone(), r))
+                .collect(),
         })
     }
 
@@ -227,7 +230,10 @@ impl GtfsArchive {
         let mut buf = Vec::new();
         BufReader::new(entry)
             .read_to_end(&mut buf)
-            .map_err(|e| GtfsError::Csv { file: name, source: e.into() })?;
+            .map_err(|e| GtfsError::Csv {
+                file: name,
+                source: e.into(),
+            })?;
         csv::ReaderBuilder::new()
             .flexible(true)
             .from_reader(buf.as_slice())
@@ -235,7 +241,10 @@ impl GtfsArchive {
             .filter_map(|r| match r {
                 Ok(item) if predicate(&item) => Some(Ok(item)),
                 Ok(_) => None,
-                Err(e) => Some(Err(GtfsError::Csv { file: name, source: e })),
+                Err(e) => Some(Err(GtfsError::Csv {
+                    file: name,
+                    source: e,
+                })),
             })
             .collect::<Result<Vec<T>, _>>()
             .map(Some)
@@ -253,7 +262,10 @@ impl GtfsArchive {
     }
 
     /// Read and deserialize an entire CSV entry from the ZIP.
-    fn read_csv<T: serde::de::DeserializeOwned>(&self, name: &'static str) -> Result<Vec<T>, GtfsError> {
+    fn read_csv<T: serde::de::DeserializeOwned>(
+        &self,
+        name: &'static str,
+    ) -> Result<Vec<T>, GtfsError> {
         self.read_csv_filtered(name, |_| true)
     }
 
@@ -286,7 +298,10 @@ impl GtfsArchive {
             .filter_map(|r| match r {
                 Ok(item) if predicate(&item) => Some(Ok(item)),
                 Ok(_) => None,
-                Err(e) => Some(Err(GtfsError::Csv { file: name, source: e })),
+                Err(e) => Some(Err(GtfsError::Csv {
+                    file: name,
+                    source: e,
+                })),
             })
             .collect()
     }

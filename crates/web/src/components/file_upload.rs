@@ -9,9 +9,11 @@ pub fn FileUpload() -> impl IntoView {
 
     let on_change = move |ev: web_sys::Event| {
         use wasm_bindgen::JsCast;
-        let input = ev.target().unwrap()
-            .dyn_into::<web_sys::HtmlInputElement>().unwrap();
-        let files = input.files().unwrap();
+        let input = ev.target()
+            .expect("change event should have a target")
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .expect("change target should be a file input");
+        let files = input.files().expect("file input should have a FileList");
         let Some(file) = files.get(0) else { return };
         let name = file.name();
         let gloo = gloo_file::File::from(file);

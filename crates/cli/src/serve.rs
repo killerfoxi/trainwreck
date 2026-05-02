@@ -5,15 +5,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
+    Json, Router,
     extract::{Query, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
-    Json, Router,
 };
 use jiff::Zoned;
 use serde::{Deserialize, Serialize};
-use trainwreck_core::{gtfs::GtfsArchive, realtime, DepartureStatus};
+use trainwreck_core::{DepartureStatus, gtfs::GtfsArchive, realtime};
 
 // ── state ────────────────────────────────────────────────────────────────────
 
@@ -97,7 +97,10 @@ async fn stops_handler(
             // standalone stops with no parent.  Individual platforms are shown in
             // the departure table, not the search list.
             .filter(|s| s.parent_station.as_deref().unwrap_or("").is_empty())
-            .map(|s| StopItem { stop_id: s.stop_id, stop_name: s.stop_name })
+            .map(|s| StopItem {
+                stop_id: s.stop_id,
+                stop_name: s.stop_name,
+            })
             .collect(),
     ))
 }
@@ -149,7 +152,10 @@ async fn schedule_handler(
     // Look up stop records for the stops actually referenced by the schedule so
     // we can attach platform information to each departure.
     let schedule_stop_ids: std::collections::HashSet<&str> = schedule.stop_ids().collect();
-    let stop_map = state.gtfs.stops_by_ids(&schedule_stop_ids).map_err(api_err)?;
+    let stop_map = state
+        .gtfs
+        .stops_by_ids(&schedule_stop_ids)
+        .map_err(api_err)?;
 
     // Fetch real-time data if an API key is configured; failures are non-fatal.
     let feed = if let Some(key) = &state.api_key {
@@ -166,7 +172,11 @@ async fn schedule_handler(
         .into_iter()
         .map(|(st, trip, route)| {
             let route_name = route
-                .and_then(|r| r.route_short_name.as_deref().or(r.route_long_name.as_deref()))
+                .and_then(|r| {
+                    r.route_short_name
+                        .as_deref()
+                        .or(r.route_long_name.as_deref())
+                })
                 .unwrap_or(trip.route_id.as_str())
                 .to_string();
             let route_type = route.and_then(|r| r.route_type);
@@ -184,12 +194,16 @@ async fn schedule_handler(
             // Derive platform label: prefer explicit platform_code, fall back to
             // the stop's own name (only when it is a child of a parent station).
             let platform = stop_map.get(&st.stop_id).and_then(|stop| {
-                if let Some(ref pc) = stop.platform_code {
-                    if !pc.is_empty() {
-                        return Some(pc.clone());
-                    }
+                if let Some(ref pc) = stop.platform_code
+                    && !pc.is_empty()
+                {
+                    return Some(pc.clone());
                 }
-                if stop.parent_station.as_deref().is_some_and(|p| !p.is_empty()) {
+                if stop
+                    .parent_station
+                    .as_deref()
+                    .is_some_and(|p| !p.is_empty())
+                {
                     return Some(stop.stop_name.clone());
                 }
                 None
@@ -255,9 +269,7 @@ fn serve_asset(path: &str) -> Option<axum::response::Response> {
         Some("css") => "text/css",
         _ => "application/octet-stream",
     };
-    Some(
-        ([("content-type", content_type)], file.data.into_owned()).into_response(),
-    )
+    Some(([("content-type", content_type)], file.data.into_owned()).into_response())
 }
 
 #[cfg(feature = "embed-web")]
@@ -292,19 +304,16 @@ pub async fn run_server(
         .route("/api/schedule", get(schedule_handler))
         .with_state(Arc::clone(&state));
 
-    let app = match web_dir {
-        Some(dir) => {
-            use tower_http::services::{ServeDir, ServeFile};
-            let index = ServeFile::new(dir.join("index.html"));
-            app.fallback_service(ServeDir::new(&dir).not_found_service(index))
-        }
-        None => {
-            #[cfg(feature = "embed-web")]
-            let app = app.fallback(serve_embedded);
-            #[cfg(not(feature = "embed-web"))]
-            let app = app.route("/", get(fallback_index));
-            app
-        }
+    let app = if let Some(dir) = web_dir {
+        use tower_http::services::{ServeDir, ServeFile};
+        let index = ServeFile::new(dir.join("index.html"));
+        app.fallback_service(ServeDir::new(&dir).not_found_service(index))
+    } else {
+        #[cfg(feature = "embed-web")]
+        let app = app.fallback(serve_embedded);
+        #[cfg(not(feature = "embed-web"))]
+        let app = app.route("/", get(fallback_index));
+        app
     };
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

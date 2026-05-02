@@ -77,9 +77,14 @@ async fn main() -> eyre::Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Command::Query { gtfs, stop, api_key, timezone } => {
-            let archive = gtfs::GtfsArchive::open(&gtfs)
-                .wrap_err_with(|| format!("opening GTFS archive {}", gtfs.display()))?;
+        Command::Query {
+            gtfs: path,
+            stop,
+            api_key,
+            timezone,
+        } => {
+            let archive = gtfs::GtfsArchive::open(&path)
+                .wrap_err_with(|| format!("opening GTFS archive {}", path.display()))?;
             match stop {
                 Some(q) => {
                     show_schedule(&archive, &q, api_key.as_deref(), timezone.as_deref()).await?;
@@ -87,13 +92,24 @@ async fn main() -> eyre::Result<()> {
                 None => list_stops(&archive)?,
             }
         }
-        Command::Web { gtfs, api_key, timezone, port, bind, web_dir } => {
-            let archive = gtfs::GtfsArchive::open(&gtfs)
-                .wrap_err_with(|| format!("opening GTFS archive {}", gtfs.display()))?;
+        Command::Web {
+            gtfs: path,
+            api_key,
+            timezone,
+            port,
+            bind,
+            web_dir,
+        } => {
+            let archive = gtfs::GtfsArchive::open(&path)
+                .wrap_err_with(|| format!("opening GTFS archive {}", path.display()))?;
             let addr: SocketAddr = format!("{bind}:{port}")
                 .parse()
                 .wrap_err("invalid bind address")?;
-            let state = serve::ServerState { gtfs: archive, api_key, timezone };
+            let state = serve::ServerState {
+                gtfs: archive,
+                api_key,
+                timezone,
+            };
             serve::run_server(state, addr, web_dir).await?;
         }
     }
@@ -124,11 +140,15 @@ async fn show_schedule(
 
     let tz_name = match timezone {
         Some(tz) => Some(tz.to_owned()),
-        None => archive.agency_timezone().wrap_err("reading agency timezone")?,
+        None => archive
+            .agency_timezone()
+            .wrap_err("reading agency timezone")?,
     };
     let now = Zoned::now();
     let now = match tz_name.as_deref() {
-        Some(tz) => now.in_tz(tz).wrap_err_with(|| format!("unknown timezone \"{tz}\""))?,
+        Some(tz) => now
+            .in_tz(tz)
+            .wrap_err_with(|| format!("unknown timezone \"{tz}\""))?,
         None => now,
     };
 
@@ -142,7 +162,10 @@ async fn show_schedule(
         .wrap_err("building schedule")?;
 
     if matches.len() == 1 {
-        println!("\nSchedule for {} ({}):", matches[0].stop_name, matches[0].stop_id);
+        println!(
+            "\nSchedule for {} ({}):",
+            matches[0].stop_name, matches[0].stop_id
+        );
     } else {
         println!("\nSchedule for \"{query}\" ({} stops):", matches.len());
         for stop in &matches {
@@ -150,13 +173,14 @@ async fn show_schedule(
         }
     }
 
-    let realtime = async {
-        realtime::fetch_trip_updates(api_key?)
+    let realtime = if let Some(key) = api_key {
+        realtime::fetch_trip_updates(key)
             .await
             .inspect_err(|e| eprintln!("Warning: real-time data unavailable: {e}"))
             .ok()
-    }
-    .await;
+    } else {
+        None
+    };
 
     print_departures(&schedule, realtime.as_ref(), &now);
     Ok(())
@@ -174,7 +198,11 @@ fn print_departures(
     }
     for (st, trip, route) in departures {
         let route_name = route
-            .and_then(|r| r.route_short_name.as_deref().or(r.route_long_name.as_deref()))
+            .and_then(|r| {
+                r.route_short_name
+                    .as_deref()
+                    .or(r.route_long_name.as_deref())
+            })
             .unwrap_or(trip.route_id.as_str());
         let headsign = trip.trip_headsign.as_deref().unwrap_or("?");
         let rel = relative_time(st.departure_time, now);
@@ -203,7 +231,10 @@ fn relative_time(dep: gtfs::GtfsTime, now: &Zoned) -> String {
     // floor for past trains since they've already been gone that many whole minutes.
     match diff_secs {
         0 => "now".to_owned(),
-        1.. => format!("in {}", fmt_duration(((diff_secs + 59) / 60).cast_unsigned())),
+        1.. => format!(
+            "in {}",
+            fmt_duration(((diff_secs + 59) / 60).cast_unsigned())
+        ),
         ..0 => format!("{} ago", fmt_duration((-diff_secs / 60).cast_unsigned())),
     }
 }

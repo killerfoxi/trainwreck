@@ -55,10 +55,11 @@ impl std::fmt::Display for GtfsTime {
         let h = self.0 / 3600;
         let m = (self.0 % 3600) / 60;
         if h < 24 {
-            return write!(f, "{h:02}:{m:02}");
+            write!(f, "{h:02}:{m:02}")
+        } else {
+            // Past midnight of the service day; show wall-clock time with +1d marker.
+            write!(f, "{:02}:{m:02}+1d", h - 24)
         }
-        // Past midnight of the service day; show wall-clock time with +1d marker.
-        write!(f, "{:02}:{m:02}+1d", h - 24)
     }
 }
 
@@ -199,16 +200,16 @@ impl Route {
     #[must_use]
     pub fn transport_label(&self) -> &'static str {
         match self.route_type {
-            Some(0)                  => "Tram",
-            Some(1)                  => "Subway",
+            Some(0) => "Tram",
+            Some(1) => "Subway",
             Some(2 | 100..=199) => "Rail",
             Some(3 | 700..=799) => "Bus",
-            Some(4)                  => "Ferry",
-            Some(5)                  => "Cable Car",
-            Some(6)                  => "Gondola",
-            Some(7)                  => "Funicular",
-            Some(11)                 => "Trolleybus",
-            _                        => "Transit",
+            Some(4) => "Ferry",
+            Some(5) => "Cable Car",
+            Some(6) => "Gondola",
+            Some(7) => "Funicular",
+            Some(11) => "Trolleybus",
+            _ => "Transit",
         }
     }
 
@@ -223,11 +224,11 @@ impl Route {
     pub fn transport_css_class_for(route_type: Option<u16>) -> &'static str {
         match route_type {
             Some(0 | 5 | 6 | 7 | 11) => "tram",
-            Some(1)                   => "subway",
-            Some(2 | 100..=199)       => "rail",
-            Some(3 | 700..=799)       => "bus",
-            Some(4)                   => "ferry",
-            _                         => "transit",
+            Some(1) => "subway",
+            Some(2 | 100..=199) => "rail",
+            Some(3 | 700..=799) => "bus",
+            Some(4) => "ferry",
+            _ => "transit",
         }
     }
 }

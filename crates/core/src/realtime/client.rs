@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use prost::Message;
 
 use super::{
@@ -13,13 +15,18 @@ const TRIP_CANCELED: i32 = 3;
 // StopTimeUpdate.ScheduleRelationship::SKIPPED = 1
 const STOP_SKIPPED: i32 = 1;
 
+fn http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
 /// Fetch and decode a GTFS-RT `FeedMessage` from the OTD Swiss real-time endpoint.
 ///
 /// # Errors
 /// Returns [`RealtimeError::Http`] on network or HTTP-status failure,
 /// or [`RealtimeError::Decode`] if the response body is not a valid protobuf `FeedMessage`.
 pub async fn fetch_trip_updates(api_key: &str) -> Result<RealtimeFeed, RealtimeError> {
-    let bytes = reqwest::Client::new()
+    let bytes = http_client()
         .get(URL)
         .header("Authorization", format!("Bearer {api_key}"))
         .send()

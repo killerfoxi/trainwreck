@@ -7,8 +7,10 @@ pub fn ApiKeyInput() -> impl IntoView {
 
     let on_input = move |ev: web_sys::Event| {
         use wasm_bindgen::JsCast;
-        let val = ev.target().unwrap()
-            .dyn_into::<web_sys::HtmlInputElement>().unwrap()
+        let val = ev.target()
+            .expect("input event should have a target")
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .expect("input target should be an input element")
             .value();
         // Persist to localStorage
         if let Some(storage) = web_sys::window()

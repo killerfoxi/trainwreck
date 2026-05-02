@@ -35,9 +35,10 @@ impl std::fmt::Display for DepartureStatus {
                 let secs = delay_secs.unsigned_abs();
                 let (mins, rem) = (secs / 60, secs % 60);
                 if mins == 0 {
-                    return write!(f, "[{sign}{rem}s]");
+                    write!(f, "[{sign}{rem}s]")
+                } else {
+                    write!(f, "[{sign}{mins}m{rem:02}s]")
                 }
-                write!(f, "[{sign}{mins}m{rem:02}s]")
             }
         }
     }

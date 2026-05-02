@@ -8,13 +8,7 @@ use js_sys::Date;
 #[must_use]
 pub fn now_secs_since_midnight() -> u32 {
     let d = Date::new_0();
-    // JS Date.getHours/getMinutes/getSeconds return u32-range values.
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-    let (h, min, s) = (
-        d.get_hours() as u32,
-        d.get_minutes() as u32,
-        d.get_seconds() as u32,
-    );
+    let (h, min, s) = (d.get_hours(), d.get_minutes(), d.get_seconds());
     h * 3600 + min * 60 + s
 }
 

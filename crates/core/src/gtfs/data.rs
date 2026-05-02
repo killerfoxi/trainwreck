@@ -17,12 +17,12 @@ use super::query::StopSchedule;
 
 #[derive(Clone)]
 pub struct GtfsData {
-    pub stops:       Vec<Stop>,
-    pub stop_times:  Vec<StopTime>,
-    pub trips:       HashMap<String, Trip>,
-    pub routes:      HashMap<String, Route>,
-    calendars:       Vec<Calendar>,
-    calendar_dates:  Vec<CalendarDate>,
+    pub stops: Vec<Stop>,
+    pub stop_times: Vec<StopTime>,
+    pub trips: HashMap<String, Trip>,
+    pub routes: HashMap<String, Route>,
+    calendars: Vec<Calendar>,
+    calendar_dates: Vec<CalendarDate>,
     agency_timezone: Option<String>,
 }
 
@@ -39,7 +39,7 @@ impl GtfsData {
             source: e,
         })?;
 
-        let stops      = read_csv(&mut zip, "stops.txt")?;
+        let stops = read_csv(&mut zip, "stops.txt")?;
         let stop_times = read_csv(&mut zip, "stop_times.txt")?;
 
         let trips: HashMap<String, Trip> = read_csv::<Trip>(&mut zip, "trips.txt")?
@@ -52,17 +52,24 @@ impl GtfsData {
             .map(|r| (r.route_id.clone(), r))
             .collect();
 
-        let calendars = read_optional_csv::<Calendar>(&mut zip, "calendar.txt")?
-            .unwrap_or_default();
+        let calendars =
+            read_optional_csv::<Calendar>(&mut zip, "calendar.txt")?.unwrap_or_default();
         let calendar_dates =
-            read_optional_csv::<CalendarDate>(&mut zip, "calendar_dates.txt")?
-                .unwrap_or_default();
+            read_optional_csv::<CalendarDate>(&mut zip, "calendar_dates.txt")?.unwrap_or_default();
 
         let agency_timezone = read_optional_csv::<Agency>(&mut zip, "agency.txt")?
             .and_then(|v| v.into_iter().next())
             .map(|a| a.agency_timezone);
 
-        Ok(Self { stops, stop_times, trips, routes, calendars, calendar_dates, agency_timezone })
+        Ok(Self {
+            stops,
+            stop_times,
+            trips,
+            routes,
+            calendars,
+            calendar_dates,
+            agency_timezone,
+        })
     }
 
     /// Case-insensitive substring search on stop names. Returns up to 30 matches.
@@ -102,8 +109,12 @@ impl GtfsData {
         }
         for cd in self.calendar_dates.iter().filter(|cd| cd.date == date_str) {
             match cd.exception_type {
-                ExceptionType::Added   => { active.insert(cd.service_id.clone()); }
-                ExceptionType::Removed => { active.remove(&cd.service_id); }
+                ExceptionType::Added => {
+                    active.insert(cd.service_id.clone());
+                }
+                ExceptionType::Removed => {
+                    active.remove(&cd.service_id);
+                }
             }
         }
         Some(active)
@@ -118,34 +129,39 @@ impl GtfsData {
     ) -> StopSchedule {
         let stop_id_set: HashSet<&str> = stop_ids.iter().copied().collect();
 
-        let stop_times: Vec<StopTime> = self.stop_times.iter()
+        let stop_times: Vec<StopTime> = self
+            .stop_times
+            .iter()
             .filter(|st| stop_id_set.contains(st.stop_id.as_str()))
             .cloned()
             .collect();
 
-        let trip_ids: HashSet<&str> = stop_times.iter()
-            .map(|st| st.trip_id.as_str())
-            .collect();
+        let trip_ids: HashSet<&str> = stop_times.iter().map(|st| st.trip_id.as_str()).collect();
 
-        let trips: HashMap<String, Trip> = self.trips.iter()
+        let trips: HashMap<String, Trip> = self
+            .trips
+            .iter()
             .filter(|(id, trip)| {
                 trip_ids.contains(id.as_str())
-                    && active_services
-                        .is_none_or(|s| s.contains(&trip.service_id))
+                    && active_services.is_none_or(|s| s.contains(&trip.service_id))
             })
             .map(|(id, t)| (id.clone(), t.clone()))
             .collect();
 
-        let route_ids: HashSet<&str> = trips.values()
-            .map(|t| t.route_id.as_str())
-            .collect();
+        let route_ids: HashSet<&str> = trips.values().map(|t| t.route_id.as_str()).collect();
 
-        let routes: HashMap<String, Route> = self.routes.iter()
+        let routes: HashMap<String, Route> = self
+            .routes
+            .iter()
             .filter(|(id, _)| route_ids.contains(id.as_str()))
             .map(|(id, r)| (id.clone(), r.clone()))
             .collect();
 
-        StopSchedule { stop_times, trips, routes }
+        StopSchedule {
+            stop_times,
+            trips,
+            routes,
+        }
     }
 
     #[must_use]
@@ -165,8 +181,7 @@ fn read_csv<T: serde::de::DeserializeOwned>(
     zip: &mut ZipArchive<Cursor<&[u8]>>,
     name: &'static str,
 ) -> Result<Vec<T>, GtfsError> {
-    read_optional_csv(zip, name)?
-        .ok_or(GtfsError::MissingFile { name })
+    read_optional_csv(zip, name)?.ok_or(GtfsError::MissingFile { name })
 }
 
 fn read_optional_csv<T: serde::de::DeserializeOwned>(
@@ -181,12 +196,18 @@ fn read_optional_csv<T: serde::de::DeserializeOwned>(
     let mut buf = Vec::new();
     BufReader::new(entry)
         .read_to_end(&mut buf)
-        .map_err(|e| GtfsError::Csv { file: name, source: e.into() })?;
+        .map_err(|e| GtfsError::Csv {
+            file: name,
+            source: e.into(),
+        })?;
     csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(buf.as_slice())
         .deserialize::<T>()
         .collect::<Result<Vec<T>, _>>()
         .map(Some)
-        .map_err(|e| GtfsError::Csv { file: name, source: e })
+        .map_err(|e| GtfsError::Csv {
+            file: name,
+            source: e,
+        })
 }
